@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" href="../../../resources/styles.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link rel="icon" type="image/x-icon" href="../../../resources/favicon.ico">
+    <title>Tools Component</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        .full-screen {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+<div class="full-screen" id="container"></div>
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.152.2/build/three.module.js",
+        "web-ifc": "https://unpkg.com/web-ifc@0.0.48/web-ifc-api.js",
+        "stats.js/src/Stats.js": "https://unpkg.com/stats-js@1.0.1/src/Stats.js",
+        "three/examples/jsm/libs/lil-gui.module.min": "https://unpkg.com/three@0.152.2/examples/jsm/libs/lil-gui.module.min.js",
+        "openbim-components": "../../../resources/openbim-components.js",
+        "client-zip": "https://unpkg.com/client-zip@2.3.0/index.js"
+      }
+    }
+</script>
+</body>
+</html>
+<script type="module">
+
+    // Set up scene (see SimpleScene tutorial)
+
+    import * as THREE from 'three';
+    import * as OBC from 'openbim-components';
+    import * as WEBIFC from 'web-ifc';
+    import Stats from 'stats.js/src/Stats.js';
+    import * as dat from 'three/examples/jsm/libs/lil-gui.module.min';
+    import {downloadZip} from 'client-zip';
+
+    const container = document.getElementById('container');
+
+    const components = new OBC.Components();
+
+    components.scene = new OBC.SimpleScene(components);
+    components.renderer = new OBC.PostproductionRenderer(components, container);
+    components.camera = new OBC.SimpleCamera(components);
+    components.raycaster = new OBC.SimpleRaycaster(components);
+
+    components.init();
+
+    components.renderer.postproduction.enabled = true;
+
+    const scene = components.scene.get();
+
+    components.camera.controls.setLookAt(12, 6, 8, 0, 0, -10);
+
+    components.scene.setup();
+
+    const grid = new OBC.SimpleGrid(components, new THREE.Color(0x666666));
+    const customEffects = components.renderer.postproduction.customEffects;
+    customEffects.excludedMeshes.push(grid.get());
+
+
+    const gridSize = 6;
+
+    const ifcAPI = new WEBIFC.IfcAPI();
+    ifcAPI.SetWasmPath("https://unpkg.com/web-ifc@0.0.48/", true);
+
+    await ifcAPI.Init();
+
+    const model = ifcAPI.CreateModel({schema: WEBIFC.Schemas.IFC4X3});
+
+    let dir =  { x: 0, y: 0, z: 1 };
+    let rad = 0.25;
+    let len = 2;
+    let direction = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCDIRECTION, [ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.x), ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.y), ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.z)]);
+    let profileLocation = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCCARTESIANPOINT, [ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,0), ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,0)]);
+    let profileAxis = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCAXIS2PLACEMENT2D, profileLocation, null);
+    let profile =  ifcAPI.CreateIfcEntity(model, WEBIFC.IFCCIRCLEPROFILEDEF, WEBIFC.IFC4.IfcProfileTypeEnum.AREA, ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,'column-prefab'), profileAxis, ifcAPI.CreateIfcType(model,WEBIFC.IFCPOSITIVELENGTHMEASURE,rad));
+
+    const columns = [];
+
+    for (let i = 0; i < gridSize; i++) {
+        for (let j = 0; j < gridSize; j++) {
+
+            let pos = {x: i, y: j, z: 0};
+
+            let location = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCCARTESIANPOINT, [ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.x), ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.y),ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.z)]);
+            let placement= ifcAPI.CreateIfcEntity(model, WEBIFC.IFCAXIS2PLACEMENT3D, location, null, null);
+            let solid = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCEXTRUDEDAREASOLID, profile, placement, direction, ifcAPI.CreateIfcType(model, WEBIFC.IFCPOSITIVELENGTHMEASURE,len));
+            let column = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCCOLUMN, ifcAPI.CreateIfcType(model, WEBIFC.IFCGLOBALLYUNIQUEID,"GUID"), null,ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,"name"),null, ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,"label"), placement, solid,ifcAPI.CreateIfcType(model,WEBIFC.IFCIDENTIFIER,"sadf"), null);
+
+            columns.push(column);
+
+            ifcAPI.WriteLine(model, column);
+        }
+    }
+
+    const ids = columns.map(column => column.expressID);
+
+    function newThreeJsMesh(geometry, transform) {
+        const index = ifcAPI.GetIndexArray(
+            geometry.GetIndexData(),
+            geometry.GetIndexDataSize()
+        );
+
+        const vertexData = ifcAPI.GetVertexArray(
+            geometry.GetVertexData(),
+            geometry.GetVertexDataSize()
+        );
+
+        const position = new Float32Array(vertexData.length / 2);
+        const normal = new Float32Array(vertexData.length / 2);
+
+        for (let i = 0; i < vertexData.length; i += 6) {
+            position[i / 2] = vertexData[i];
+            position[i / 2 + 1] = vertexData[i + 1];
+            position[i / 2 + 2] = vertexData[i + 2];
+
+            normal[i / 2] = vertexData[i + 3];
+            normal[i / 2 + 1] = vertexData[i + 4];
+            normal[i / 2 + 2] = vertexData[i + 5];
+        }
+
+        const threeGeom = new THREE.BufferGeometry();
+        threeGeom.setAttribute("position", new THREE.BufferAttribute(position, 3));
+        threeGeom.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
+        threeGeom.setIndex(Array.from(index));
+
+        const mesh = new THREE.Mesh(threeGeom);
+        mesh.applyMatrix4(new THREE.Matrix4().fromArray(transform));
+        scene.add(mesh);
+    }
+
+    ifcAPI.StreamMeshes(0, ids, (mesh) => {
+        const size = mesh.geometries.size();
+        for(let i = 0; i < size; i++) {
+            const geometry = mesh.geometries.get(i);
+            const geometryData = ifcAPI.GetGeometry(0, geometry.geometryExpressID);
+            newThreeJsMesh(geometryData, geometry.flatTransformation);
+        }
+    });
+
+
+    // Set up stats
+
+    const stats = new Stats();
+    stats.showPanel(2);
+    document.body.append(stats.dom);
+    stats.dom.style.left = '0px';
+    const renderer = components.renderer;
+    renderer.onBeforeUpdate.add(() => stats.begin());
+    renderer.onAfterUpdate.add(() => stats.end());
+
+
+</script>
