@@ -29,7 +29,7 @@
     {
       "imports": {
         "three": "https://unpkg.com/three@0.152.2/build/three.module.js",
-        "web-ifc": "https://unpkg.com/web-ifc@0.0.48/web-ifc-api.js",
+        "web-ifc": "../../../node_modules/web-ifc/web-ifc-api.js",
         "stats.js/src/Stats.js": "https://unpkg.com/stats-js@1.0.1/src/Stats.js",
         "three/examples/jsm/libs/lil-gui.module.min": "https://unpkg.com/three@0.152.2/examples/jsm/libs/lil-gui.module.min.js",
         "openbim-components": "../../../resources/openbim-components.js",
@@ -49,6 +49,8 @@
     import Stats from 'stats.js/src/Stats.js';
     import * as dat from 'three/examples/jsm/libs/lil-gui.module.min';
     import {downloadZip} from 'client-zip';
+    import {CircularColumns} from "./circular-columns.js";
+    import {SimpleWalls} from "./simple-walls.js";
 
     const container = document.getElementById('container');
 
@@ -74,85 +76,36 @@
     customEffects.excludedMeshes.push(grid.get());
 
 
-    const gridSize = 6;
-
     const ifcAPI = new WEBIFC.IfcAPI();
-    ifcAPI.SetWasmPath("https://unpkg.com/web-ifc@0.0.48/", true);
 
+    ifcAPI.SetWasmPath("../../../node_modules/web-ifc/", false);
     await ifcAPI.Init();
 
     const model = ifcAPI.CreateModel({schema: WEBIFC.Schemas.IFC4X3});
 
-    let dir =  { x: 0, y: 0, z: 1 };
-    let rad = 0.25;
-    let len = 2;
-    let direction = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCDIRECTION, [ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.x), ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.y), ifcAPI.CreateIfcType(model,WEBIFC.IFCREAL,dir.z)]);
-    let profileLocation = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCCARTESIANPOINT, [ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,0), ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,0)]);
-    let profileAxis = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCAXIS2PLACEMENT2D, profileLocation, null);
-    let profile =  ifcAPI.CreateIfcEntity(model, WEBIFC.IFCCIRCLEPROFILEDEF, WEBIFC.IFC4.IfcProfileTypeEnum.AREA, ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,'column-prefab'), profileAxis, ifcAPI.CreateIfcType(model,WEBIFC.IFCPOSITIVELENGTHMEASURE,rad));
+    const columns = new CircularColumns(ifcAPI, model);
+    scene.add(columns.mesh);
 
-    const columns = [];
+    columns.add([1, 1, 1]);
+    columns.add([1, -1, 0]);
 
-    for (let i = 0; i < gridSize; i++) {
-        for (let j = 0; j < gridSize; j++) {
+    const walls = new SimpleWalls(ifcAPI, model);
+    scene.add(walls.mesh);
 
-            let pos = {x: i, y: j, z: 0};
+    walls.add([0, 0, 0]);
 
-            let location = ifcAPI.CreateIfcEntity(model,WEBIFC.IFCCARTESIANPOINT, [ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.x), ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.y),ifcAPI.CreateIfcType(model,WEBIFC.IFCLENGTHMEASURE,pos.z)]);
-            let placement= ifcAPI.CreateIfcEntity(model, WEBIFC.IFCAXIS2PLACEMENT3D, location, null, null);
-            let solid = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCEXTRUDEDAREASOLID, profile, placement, direction, ifcAPI.CreateIfcType(model, WEBIFC.IFCPOSITIVELENGTHMEASURE,len));
-            let column = ifcAPI.CreateIfcEntity(model, WEBIFC.IFCCOLUMN, ifcAPI.CreateIfcType(model, WEBIFC.IFCGLOBALLYUNIQUEID,"GUID"), null,ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,"name"),null, ifcAPI.CreateIfcType(model,WEBIFC.IFCLABEL,"label"), placement, solid,ifcAPI.CreateIfcType(model,WEBIFC.IFCIDENTIFIER,"sadf"), null);
+    // const array = ifcAPI.SaveModel(model);
+    // const file = new File([new Blob([array])], "example");
+    // const input = document.createElement("a");
+    // input.download = "example.ifc";
+    // input.href = URL.createObjectURL(file);
+    // input.click();
 
-            columns.push(column);
 
-            ifcAPI.WriteLine(model, column);
-        }
-    }
+    // Set up GUI
 
-    const ids = columns.map(column => column.expressID);
-
-    function newThreeJsMesh(geometry, transform) {
-        const index = ifcAPI.GetIndexArray(
-            geometry.GetIndexData(),
-            geometry.GetIndexDataSize()
-        );
-
-        const vertexData = ifcAPI.GetVertexArray(
-            geometry.GetVertexData(),
-            geometry.GetVertexDataSize()
-        );
-
-        const position = new Float32Array(vertexData.length / 2);
-        const normal = new Float32Array(vertexData.length / 2);
-
-        for (let i = 0; i < vertexData.length; i += 6) {
-            position[i / 2] = vertexData[i];
-            position[i / 2 + 1] = vertexData[i + 1];
-            position[i / 2 + 2] = vertexData[i + 2];
-
-            normal[i / 2] = vertexData[i + 3];
-            normal[i / 2 + 1] = vertexData[i + 4];
-            normal[i / 2 + 2] = vertexData[i + 5];
-        }
-
-        const threeGeom = new THREE.BufferGeometry();
-        threeGeom.setAttribute("position", new THREE.BufferAttribute(position, 3));
-        threeGeom.setAttribute("normal", new THREE.BufferAttribute(normal, 3));
-        threeGeom.setIndex(Array.from(index));
-
-        const mesh = new THREE.Mesh(threeGeom);
-        mesh.applyMatrix4(new THREE.Matrix4().fromArray(transform));
-        scene.add(mesh);
-    }
-
-    ifcAPI.StreamMeshes(0, ids, (mesh) => {
-        const size = mesh.geometries.size();
-        for(let i = 0; i < size; i++) {
-            const geometry = mesh.geometries.get(i);
-            const geometryData = ifcAPI.GetGeometry(0, geometry.geometryExpressID);
-            newThreeJsMesh(geometryData, geometry.flatTransformation);
-        }
-    });
+    const gui = new dat.GUI();
+    gui.add(columns, "thickness").min(0.1).max(1).step(0.1);
 
 
     // Set up stats
