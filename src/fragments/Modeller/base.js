@@ -18,7 +18,7 @@ export class Base {
     }
 
     identifier(value) {
-        return this.ifcAPI.CreateIfcType(model, WEBIFC.IFCIDENTIFIER, value);
+        return this.ifcAPI.CreateIfcType(this.model, WEBIFC.IFCIDENTIFIER, value);
     }
 
     real(value) {
@@ -59,7 +59,7 @@ export class Base {
     }
 
     axis2Placement3D(location, axis = null, direction = null) {
-        const loc = this.point(location);
+        const point = this.point(location);
         let ax = axis;
         if (axis) {
             ax = this.direction(axis);
@@ -68,7 +68,8 @@ export class Base {
         if (direction) {
             dir = this.direction(direction);
         }
-        return this.ifcAPI.CreateIfcEntity(this.model, WEBIFC.IFCAXIS2PLACEMENT3D, loc, ax, dir);
+        const placement = this.ifcAPI.CreateIfcEntity(this.model, WEBIFC.IFCAXIS2PLACEMENT3D, point, ax, dir);
+        return {placement, point};
     }
 
     extrudedAreaSolid(profile, placement, direction, length) {
@@ -83,6 +84,16 @@ export class Base {
     rectangularProfile(axis, x, y) {
         return this.ifcAPI.CreateIfcEntity(this.model, WEBIFC.IFCRECTANGLEPROFILEDEF, WEBIFC.IFC4.IfcProfileTypeEnum.AREA, this.label('asdf'), axis, x, y);
     }
+
+    bool(first, second) {
+        return this.ifcAPI.CreateIfcEntity(this.model,
+            WEBIFC.IFCBOOLEANCLIPPINGRESULT,
+            WEBIFC.IFC4.IfcBooleanOperator.DIFFERENCE,
+            first,
+            second);
+    }
+
+
 
     column(guid, placement, mesh) {
         return this.ifcAPI.CreateIfcEntity(this.model,

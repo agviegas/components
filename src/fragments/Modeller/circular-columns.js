@@ -38,7 +38,7 @@ export class CircularColumns {
         const radius = this.base.positiveLength(0.25);
         this.profile = this.base.circularProfile(axis, radius);
 
-        let placement = this.base.axis2Placement3D([0, 0, 0]);
+        let {placement} = this.base.axis2Placement3D([0, 0, 0]);
 
         this.solid = this.base.extrudedAreaSolid(this.profile, placement, direction, 2);
     }
@@ -46,7 +46,7 @@ export class CircularColumns {
     add(coords) {
         const {model, ifcAPI, solid} = this;
 
-        let placement = this.base.axis2Placement3D(coords);
+        let {placement} = this.base.axis2Placement3D(coords);
         let column = this.base.column("GUID", placement, solid);
 
         ifcAPI.WriteLine(model, column);
