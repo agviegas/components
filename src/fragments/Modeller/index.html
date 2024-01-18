@@ -109,6 +109,17 @@
     gui.add(walls, "yPosition").min(-0.2).max(0.2).step(0.01);
     gui.add(walls, "zPosition").min(-2).max(2).step(0.1);
 
+    window.addEventListener("keydown", (event) => {
+        if (event.code === "KeyP") {
+            const model = ifcAPI.SaveModel(0);
+            const file = new File([new Blob([model])], "test.ifc");
+            const a = document.createElement("a");
+            a.download = "test.ifc";
+            a.href = URL.createObjectURL(file);
+            a.click();
+        }
+    })
+
 
     // Set up stats
 
